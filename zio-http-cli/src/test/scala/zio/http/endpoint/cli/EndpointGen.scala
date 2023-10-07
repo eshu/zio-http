@@ -91,9 +91,9 @@ object EndpointGen {
     }
 
   lazy val anyQuery: Gen[Any, CliReprOf[Codec[_]]] =
-    Gen.alphaNumericStringBounded(1, 30).zip(anyTextCodec).map { case (name, codec) =>
+    Gen.alphaNumericStringBounded(1, 30).zip(anyTextCodec).zip(Gen.boolean).map { case (name, codec, isMono) =>
       CliRepr(
-        HttpCodec.Query(name, codec),
+        if (isMono) HttpCodec.MonoQuery(name, codec) else HttpCodec.MultiQuery(name, codec),
         codec match {
           case TextCodec.Constant(value) => CliEndpoint(url = HttpOptions.QueryConstant(name, value) :: Nil)
           case _                         => CliEndpoint(url = HttpOptions.Query(name, codec) :: Nil)

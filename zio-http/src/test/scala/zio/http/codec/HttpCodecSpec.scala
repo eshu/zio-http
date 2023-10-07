@@ -37,9 +37,21 @@ object HttpCodecSpec extends ZIOHttpSpec {
 
   val emptyJson = Body.fromString("{}")
 
-  val isAge                           = "isAge"
-  val codecBool                       = QueryCodec.paramBool(isAge)
-  def makeRequest(paramValue: String) = Request.get(googleUrl.queryParams(QueryParams(isAge -> paramValue)))
+  val strParam    = "name"
+  val codecStr    = QueryCodec.paramStr(strParam)
+  val boolParam   = "isAge"
+  val codecBool   = QueryCodec.paramBool(boolParam)
+  val intParam    = "age"
+  val codecInt    = QueryCodec.paramInt(intParam)
+  val longParam   = "count"
+  val codecLong   = QueryCodec.paramAs[Long](longParam)
+  val seqIntParam = "integers"
+  val codecSeqInt = QueryCodec.params[Int](seqIntParam)
+
+  def makeRequest(name: String, value: Any)              =
+    Request.get(googleUrl.queryParams(QueryParams(name -> value.toString)))
+  def makeChunkRequest(name: String, values: Chunk[Any]) =
+    Request.get(googleUrl.queryParams(QueryParams(name -> values.map(_.toString))))
 
   def spec = suite("HttpCodecSpec")(
     suite("fallback") {
@@ -120,25 +132,61 @@ object HttpCodecSpec extends ZIOHttpSpec {
         }
       } +
       suite("QueryCodec")(
-        test("paramBool decoding with case-insensitive") {
-          assertZIO(codecBool.decodeRequest(makeRequest("true")))(Assertion.isTrue) &&
-          assertZIO(codecBool.decodeRequest(makeRequest("TRUE")))(Assertion.isTrue) &&
-          assertZIO(codecBool.decodeRequest(makeRequest("yes")))(Assertion.isTrue) &&
-          assertZIO(codecBool.decodeRequest(makeRequest("YES")))(Assertion.isTrue) &&
-          assertZIO(codecBool.decodeRequest(makeRequest("on")))(Assertion.isTrue) &&
-          assertZIO(codecBool.decodeRequest(makeRequest("ON")))(Assertion.isTrue)
+        test("paramStr decoding and encoding") {
+          check(Gen.alphaNumericString) { value =>
+            assertZIO(codecStr.decodeRequest(makeRequest(strParam, value)))(Assertion.equalTo(value)) &&
+            assert(codecStr.encodeRequest(value).url.queryParams.get(strParam))(
+              Assertion.isSome(Assertion.equalTo(value)),
+            )
+          }
         },
-        test("paramBool decoding with different values") {
-          assertZIO(codecBool.decodeRequest(makeRequest("true")))(Assertion.isTrue) &&
-          assertZIO(codecBool.decodeRequest(makeRequest("1")))(Assertion.isTrue) &&
-          assertZIO(codecBool.decodeRequest(makeRequest("yes")))(Assertion.isTrue) &&
-          assertZIO(codecBool.decodeRequest(makeRequest("on")))(Assertion.isTrue)
+        test("paramBool decoding true") {
+          Chunk("true", "TRUE", "yes", "YES", "on", "ON", "1") map { value =>
+            assertZIO(codecBool.decodeRequest(makeRequest(boolParam, value)))(Assertion.isTrue)
+          } reduce (_ && _)
+        },
+        test("paramBool decoding false") {
+          Chunk("false", "FALSE", "no", "NO", "off", "OFF", "0") map { value =>
+            assertZIO(codecBool.decodeRequest(makeRequest(boolParam, value)))(Assertion.isFalse)
+          } reduce (_ && _)
         },
         test("paramBool encoding") {
           val requestTrue  = codecBool.encodeRequest(true)
           val requestFalse = codecBool.encodeRequest(false)
-          assert(requestTrue.url.queryParams.get(isAge).get)(Assertion.equalTo("true")) &&
-          assert(requestFalse.url.queryParams.get(isAge).get)(Assertion.equalTo("false"))
+          assert(requestTrue.url.queryParams.get(boolParam).get)(Assertion.equalTo("true")) &&
+          assert(requestFalse.url.queryParams.get(boolParam).get)(Assertion.equalTo("false"))
+        },
+        test("paramInt decoding and encoding") {
+          check(Gen.int) { value =>
+            assertZIO(codecInt.decodeRequest(makeRequest(intParam, value)))(Assertion.equalTo(value)) &&
+            assert(codecInt.encodeRequest(value).url.queryParams.get(intParam))(
+              Assertion.isSome(Assertion.equalTo(value.toString)),
+            )
+          }
+        },
+        test("paramLong decoding and encoding") {
+          check(Gen.long) { value =>
+            assertZIO(codecLong.decodeRequest(makeRequest(longParam, value)))(Assertion.equalTo(value)) &&
+            assert(codecLong.encodeRequest(value).url.queryParams.get(longParam))(
+              Assertion.isSome(Assertion.equalTo(value.toString)),
+            )
+          }
+        },
+        test("paramSeq decoding with empty chunk") {
+          assertZIO(codecSeqInt.decodeRequest(makeChunkRequest(seqIntParam, Chunk.empty)))(Assertion.isEmpty)
+        },
+        test("paramSeq decoding with non-empty chunk") {
+          assertZIO(codecSeqInt.decodeRequest(makeChunkRequest(seqIntParam, Chunk("2023", "10", "7"))))(
+            Assertion.equalTo(Chunk(2023, 10, 7)),
+          )
+        },
+        test("paramSeq encoding with empty chunk") {
+          assert(codecSeqInt.encodeRequest(Chunk.empty).url.queryParams.get(seqIntParam))(Assertion.isNone)
+        },
+        test("paramSeq encoding with non-empty chunk") {
+          assert(codecSeqInt.encodeRequest(Chunk(1974, 5, 3)).url.queryParams.getAll(seqIntParam).get)(
+            Assertion.equalTo(Chunk("1974", "5", "3")),
+          )
         },
       ) +
       suite("Codec with examples") {

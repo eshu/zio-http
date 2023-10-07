@@ -30,7 +30,7 @@ import zio.schema.{DeriveSchema, Schema}
 import zio.http.Header.ContentType
 import zio.http.Method._
 import zio.http._
-import zio.http.codec.HttpCodec.{query, queryInt}
+import zio.http.codec.HttpCodec.{queries, query, queryAs, queryInt}
 import zio.http.codec._
 import zio.http.endpoint.EndpointSpec.testEndpoint
 import zio.http.forms.Fixtures.formField
@@ -103,6 +103,26 @@ object QueryParameterSpec extends ZIOHttpSpec {
         testRoutes(s"/users/$userId?key=&value=", s"path(users, $userId, Some(), Some())") &&
         testRoutes(s"/users/$userId?key=&value=$value", s"path(users, $userId, Some(), Some($value))") &&
         testRoutes(s"/users/$userId?key=$key&value=$value", s"path(users, $userId, Some($key), Some($value))")
+      }
+    },
+    test("query parameter with multiple values") {
+      check(Gen.boolean, Gen.alphaNumericString, Gen.alphaNumericString) { (isSomething, name1, name2) =>
+        val testRoutes = testEndpoint(
+          Routes(
+            Endpoint(GET / "data")
+              .query(queryAs[Boolean]("isSomething"))
+              .query(queries[String]("name"))
+              .out[String]
+              .implement {
+                Handler.fromFunction { case (isSomething, names) =>
+                  s"query($isSomething, ${names mkString ", "})"
+                }
+              },
+          ),
+        ) _
+        testRoutes(s"/data?isSomething=$isSomething", s"query($isSomething, )") &&
+        testRoutes(s"/data?isSomething=$isSomething&name=$name1", s"query($isSomething, $name1)") &&
+        testRoutes(s"/data?isSomething=$isSomething&name=$name1&name=$name2", s"query($isSomething, $name1, $name2)")
       }
     },
   )

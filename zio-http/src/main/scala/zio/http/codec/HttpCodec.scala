@@ -574,14 +574,49 @@ object HttpCodec extends ContentCodecs with HeaderCodecs with MethodCodecs with 
 
     def index(index: Int): ContentStream[A] = copy(index = index)
   }
-  private[http] final case class Query[A](name: String, textCodec: TextCodec[A], index: Int = 0)
-      extends Atom[HttpCodecType.Query, A]  {
-    self =>
-    def erase: Query[Any] = self.asInstanceOf[Query[Any]]
+
+  private[http] sealed trait Query[A, I] extends Atom[HttpCodecType.Query, A] {
+    def erase: Query[Any, I] = asInstanceOf[Query[Any, I]]
+
+    def name: String
+
+    def textCodec: TextCodec[I]
+
+    def index: Int
 
     def tag: AtomTag = AtomTag.Query
 
-    def index(index: Int): Query[A] = copy(index = index)
+    def index(index: Int): Query[A, I]
+
+    def encode(value: A): Chunk[String]
+
+    def decode(values: Chunk[String]): A
+
+    @inline final private[HttpCodec] def decodeItem(value: String): I =
+      if (textCodec.isDefinedAt(value)) textCodec(value)
+      else throw HttpCodecError.MalformedQueryParam(name, textCodec)
+  }
+
+  private[http] final case class MonoQuery[A](name: String, textCodec: TextCodec[A], index: Int = 0)
+      extends Query[A, A] {
+    def index(index: Int): Query[A, A] = copy(index = index)
+
+    def encode(value: A): Chunk[String] = Chunk(textCodec.encode(value))
+
+    def decode(values: Chunk[String]): A = values match {
+      case Chunk(value)           => decodeItem(value)
+      case empty if empty.isEmpty => throw HttpCodecError.MissingQueryParam(name)
+      case _                      => throw HttpCodecError.SingleQueryParamValueExpected(name)
+    }
+  }
+
+  private[http] final case class MultiQuery[I](name: String, textCodec: TextCodec[I], index: Int = 0)
+      extends Query[Chunk[I], I] {
+    def index(index: Int): Query[Chunk[I], I] = copy(index = index)
+
+    def encode(value: Chunk[I]): Chunk[String] = value map textCodec.encode
+
+    def decode(values: Chunk[String]): Chunk[I] = values map decodeItem
   }
 
   private[http] final case class Method[A](codec: SimpleCodec[zio.http.Method, A], index: Int = 0)

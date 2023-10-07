@@ -51,6 +51,9 @@ object HttpCodecError {
   final case class MissingQueryParam(queryParamName: String)                                   extends HttpCodecError {
     def message = s"Missing query parameter $queryParamName"
   }
+  final case class SingleQueryParamValueExpected(queryParamName: String)                       extends HttpCodecError {
+    def message = s"Single query parameter $queryParamName value expected, but multiple values are found"
+  }
   final case class MalformedQueryParam(queryParamName: String, textCodec: TextCodec[_])        extends HttpCodecError {
     def message = s"Malformed query parameter $queryParamName failed to decode using $textCodec"
   }

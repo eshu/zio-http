@@ -15,30 +15,36 @@
  */
 
 package zio.http.codec
+import zio.Chunk
 import zio.stacktracer.TracingImplicits.disableAutoTrace
 private[codec] trait QueryCodecs {
   def query(name: String): QueryCodec[String] =
-    HttpCodec.Query(name, TextCodec.string)
+    HttpCodec.MonoQuery(name, TextCodec.string)
 
   def queryBool(name: String): QueryCodec[Boolean] =
-    HttpCodec.Query(name, TextCodec.boolean)
+    HttpCodec.MonoQuery(name, TextCodec.boolean)
 
   def queryInt(name: String): QueryCodec[Int] =
-    HttpCodec.Query(name, TextCodec.int)
+    HttpCodec.MonoQuery(name, TextCodec.int)
 
   def queryAs[A](name: String)(implicit codec: TextCodec[A]): QueryCodec[A] =
-    HttpCodec.Query(name, codec)
+    HttpCodec.MonoQuery(name, codec)
+
+  def queries[I](name: String)(implicit codec: TextCodec[I]): QueryCodec[Chunk[I]] =
+    HttpCodec.MultiQuery(name, codec)
 
   def paramStr(name: String): QueryCodec[String] =
-    HttpCodec.Query(name, TextCodec.string)
+    HttpCodec.MonoQuery(name, TextCodec.string)
 
   def paramBool(name: String): QueryCodec[Boolean] =
-    HttpCodec.Query(name, TextCodec.boolean)
+    HttpCodec.MonoQuery(name, TextCodec.boolean)
 
   def paramInt(name: String): QueryCodec[Int] =
-    HttpCodec.Query(name, TextCodec.int)
+    HttpCodec.MonoQuery(name, TextCodec.int)
 
   def paramAs[A](name: String)(implicit codec: TextCodec[A]): QueryCodec[A] =
-    HttpCodec.Query(name, codec)
+    HttpCodec.MonoQuery(name, codec)
 
+  def params[I](name: String)(implicit codec: TextCodec[I]): QueryCodec[Chunk[I]] =
+    HttpCodec.MultiQuery(name, codec)
 }

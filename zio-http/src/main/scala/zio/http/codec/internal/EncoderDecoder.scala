@@ -279,20 +279,8 @@ private[codec] object EncoderDecoder {
       var i       = 0
       val queries = flattened.query
       while (i < queries.length) {
-        val query = queries(i).erase
-
-        val queryParamValue =
-          queryParams
-            .getAllOrElse(query.name, Nil)
-            .collectFirst(query.textCodec)
-
-        queryParamValue match {
-          case Some(value) =>
-            inputs(i) = value
-          case None        =>
-            throw HttpCodecError.MissingQueryParam(query.name)
-        }
-
+        val query = queries(i)
+        inputs(i) = query.decode(queryParams.getAllOrElse(query.name, Nil))
         i = i + 1
       }
     }
@@ -478,9 +466,7 @@ private[codec] object EncoderDecoder {
         val query = flattened.query(i).erase
         val input = inputs(i)
 
-        val value = query.textCodec.encode(input)
-
-        queryParams = queryParams.add(query.name, value)
+        queryParams = queryParams.addAll(query.name, query.encode(input))
 
         i = i + 1
       }
