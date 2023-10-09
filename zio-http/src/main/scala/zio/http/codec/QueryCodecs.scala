@@ -15,36 +15,49 @@
  */
 
 package zio.http.codec
-import zio.Chunk
+import zio.{Chunk, NonEmptyChunk}
+import zio.prelude.{ForEach, Id}
 import zio.stacktracer.TracingImplicits.disableAutoTrace
 private[codec] trait QueryCodecs {
-  def query(name: String): QueryCodec[String] =
-    HttpCodec.MonoQuery(name, TextCodec.string)
-
-  def queryBool(name: String): QueryCodec[Boolean] =
-    HttpCodec.MonoQuery(name, TextCodec.boolean)
-
-  def queryInt(name: String): QueryCodec[Int] =
-    HttpCodec.MonoQuery(name, TextCodec.int)
-
-  def queryAs[A](name: String)(implicit codec: TextCodec[A]): QueryCodec[A] =
+  @inline def queryAs[A](name: String)(implicit codec: TextCodec[A]): QueryCodec[A] =
     HttpCodec.MonoQuery(name, codec)
 
-  def queries[I](name: String)(implicit codec: TextCodec[I]): QueryCodec[Chunk[I]] =
-    HttpCodec.MultiQuery(name, codec)
+  def query(name: String): QueryCodec[String] = queryAs[String](name)
 
-  def paramStr(name: String): QueryCodec[String] =
-    HttpCodec.MonoQuery(name, TextCodec.string)
+  def queryBool(name: String): QueryCodec[Boolean] = queryAs[Boolean](name)
 
-  def paramBool(name: String): QueryCodec[Boolean] =
-    HttpCodec.MonoQuery(name, TextCodec.boolean)
+  def queryInt(name: String): QueryCodec[Int] = queryAs[Int](name)
 
-  def paramInt(name: String): QueryCodec[Int] =
-    HttpCodec.MonoQuery(name, TextCodec.int)
+  @inline def queryAs[F[+_]: ForEach, I](name: String, cardinality: QueryCardinality[F])(implicit
+    codec: TextCodec[I],
+  ): QueryCodec[F[I]] =
+    HttpCodec.MultiQuery(name, codec, cardinality)
 
-  def paramAs[A](name: String)(implicit codec: TextCodec[A]): QueryCodec[A] =
-    HttpCodec.MonoQuery(name, codec)
+  def queryOpt[I: TextCodec](name: String): QueryCodec[Option[I]] = queryAs(name, QueryCardinality.optional)
 
-  def params[I](name: String)(implicit codec: TextCodec[I]): QueryCodec[Chunk[I]] =
-    HttpCodec.MultiQuery(name, codec)
+  def queryOne[I: TextCodec](name: String): QueryCodec[Id[I]] = queryAs(name, QueryCardinality.one)
+
+  def queries[I: TextCodec](name: String): QueryCodec[Chunk[I]] = queryAs(name, QueryCardinality.any)
+
+  def queryOneOrMore[I: TextCodec](name: String): QueryCodec[NonEmptyChunk[I]] =
+    queryAs(name, QueryCardinality.oneOrMore)
+
+  def paramAs[A](name: String)(implicit codec: TextCodec[A]): QueryCodec[A] = queryAs[A](name)
+
+  def paramStr(name: String): QueryCodec[String] = query(name)
+
+  def paramBool(name: String): QueryCodec[Boolean] = queryBool(name)
+
+  def paramInt(name: String): QueryCodec[Int] = queryInt(name)
+
+  def paramAs[F[+_]: ForEach, I: TextCodec](name: String, cardinality: QueryCardinality[F]): QueryCodec[F[I]] =
+    queryAs(name, cardinality)
+
+  def paramOpt[I: TextCodec](name: String): QueryCodec[Option[I]] = queryOpt(name)
+
+  def paramOne[I: TextCodec](name: String): QueryCodec[Id[I]] = queryOne(name)
+
+  def params[I: TextCodec](name: String): QueryCodec[Chunk[I]] = queries(name)
+
+  def paramOneOrMore[I: TextCodec](name: String): QueryCodec[NonEmptyChunk[I]] = queryOneOrMore(name)
 }

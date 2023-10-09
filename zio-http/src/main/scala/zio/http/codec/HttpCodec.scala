@@ -32,6 +32,7 @@ import zio.http.Header.Accept.MediaTypeWithQFactor
 import zio.http._
 import zio.http.codec.HttpCodec.{Annotated, Metadata}
 import zio.http.codec.internal.EncoderDecoder
+import zio.prelude._
 
 /**
  * A [[zio.http.codec.HttpCodec]] represents a codec for a part of an HTTP
@@ -610,13 +611,17 @@ object HttpCodec extends ContentCodecs with HeaderCodecs with MethodCodecs with 
     }
   }
 
-  private[http] final case class MultiQuery[I](name: String, textCodec: TextCodec[I], index: Int = 0)
-      extends Query[Chunk[I], I] {
-    def index(index: Int): Query[Chunk[I], I] = copy(index = index)
+  private[http] final case class MultiQuery[F[+_]: ForEach, I](
+    name: String,
+    textCodec: TextCodec[I],
+    cardinality: QueryCardinality[F],
+    index: Int = 0,
+  ) extends Query[F[I], I] {
+    def index(index: Int): Query[F[I], I] = copy(index = index)
 
-    def encode(value: Chunk[I]): Chunk[String] = value map textCodec.encode
+    def encode(values: F[I]): Chunk[String] = values.map(textCodec.encode).toChunk
 
-    def decode(values: Chunk[String]): Chunk[I] = values map decodeItem
+    def decode(values: Chunk[String]): F[I] = cardinality.decode(name, textCodec, values)
   }
 
   private[http] final case class Method[A](codec: SimpleCodec[zio.http.Method, A], index: Int = 0)

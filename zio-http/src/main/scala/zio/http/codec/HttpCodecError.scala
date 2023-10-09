@@ -57,6 +57,12 @@ object HttpCodecError {
   final case class MalformedQueryParam(queryParamName: String, textCodec: TextCodec[_])        extends HttpCodecError {
     def message = s"Malformed query parameter $queryParamName failed to decode using $textCodec"
   }
+
+  final case class WrongQueryParamCardinality(queryParamName: String, actual: Int, expected: String)
+    extends HttpCodecError {
+    def message = s"Wrong query parameter $queryParamName cardinality $actual, $expected expected"
+  }
+
   final case class MalformedBody(details: String, cause: Option[Throwable] = None)             extends HttpCodecError {
     def message = s"Malformed request body failed to decode: $details"
   }

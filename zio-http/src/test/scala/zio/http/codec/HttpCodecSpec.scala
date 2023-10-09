@@ -19,6 +19,7 @@ package zio.http.codec
 import java.util.UUID
 
 import zio._
+import zio.prelude.Id
 import zio.test._
 
 import zio.http._
@@ -37,16 +38,22 @@ object HttpCodecSpec extends ZIOHttpSpec {
 
   val emptyJson = Body.fromString("{}")
 
-  val strParam    = "name"
-  val codecStr    = QueryCodec.paramStr(strParam)
-  val boolParam   = "isAge"
-  val codecBool   = QueryCodec.paramBool(boolParam)
-  val intParam    = "age"
-  val codecInt    = QueryCodec.paramInt(intParam)
-  val longParam   = "count"
-  val codecLong   = QueryCodec.paramAs[Long](longParam)
-  val seqIntParam = "integers"
-  val codecSeqInt = QueryCodec.params[Int](seqIntParam)
+  private val strParam          = "name"
+  private val codecStr          = QueryCodec.paramStr(strParam)
+  private val boolParam         = "isAge"
+  private val codecBool         = QueryCodec.paramBool(boolParam)
+  private val intParam          = "age"
+  private val codecInt          = QueryCodec.paramInt(intParam)
+  private val longParam         = "count"
+  private val codecLong         = QueryCodec.paramAs[Long](longParam)
+  private val optBoolParam      = "maybe"
+  private val codecOptBool      = QueryCodec.paramOpt[Boolean](optBoolParam)
+  private val oneLongParam      = "lonelyLong"
+  private val codecOneLong      = QueryCodec.paramOne[Long](oneLongParam)
+  private val seqIntParam       = "integers"
+  private val codecSeqInt       = QueryCodec.params[Int](seqIntParam)
+  private val oneOrMoreStrParam = "names"
+  private val codecOneOrMoreStr = QueryCodec.paramOneOrMore[String](oneOrMoreStrParam)
 
   def makeRequest(name: String, value: Any)              =
     Request.get(googleUrl.queryParams(QueryParams(name -> value.toString)))
@@ -172,20 +179,72 @@ object HttpCodecSpec extends ZIOHttpSpec {
             )
           }
         },
-        test("paramSeq decoding with empty chunk") {
+        test("paramOpt decoding empty chunk") {
+          assertZIO(codecOptBool.decodeRequest(makeChunkRequest(optBoolParam, Chunk.empty)))(Assertion.isNone)
+        },
+        test("paramOpt decoding singleton chunk") {
+          assertZIO(codecOptBool.decodeRequest(makeChunkRequest(optBoolParam, Chunk("true"))))(
+            Assertion.isSome(Assertion.isTrue),
+          ) &&
+          assertZIO(codecOptBool.decodeRequest(makeChunkRequest(optBoolParam, Chunk("false"))))(
+            Assertion.isSome(Assertion.isFalse),
+          )
+        },
+        test("paramOpt encoding empty chunk") {
+          assert(codecOptBool.encodeRequest(None).url.queryParams.get(optBoolParam))(Assertion.isNone)
+        },
+        test("paramOpt encoding non-empty chunk") {
+          assert(codecOptBool.encodeRequest(Some(true)).url.queryParams.getAll(optBoolParam).get)(
+            Assertion.equalTo(Chunk("true")),
+          ) &&
+          assert(codecOptBool.encodeRequest(Some(false)).url.queryParams.getAll(optBoolParam).get)(
+            Assertion.equalTo(Chunk("false")),
+          )
+        },
+        test("paramOne decoding singleton chunk") {
+          assertZIO(codecOneLong.decodeRequest(makeChunkRequest(oneLongParam, Chunk(Long.MaxValue.toString))))(
+            Assertion.equalTo(Id(Long.MaxValue)),
+          )
+        },
+        test("paramOne encoding non-empty chunk") {
+          assert(codecOneLong.encodeRequest(Id(Long.MinValue)).url.queryParams.getAll(oneLongParam).get)(
+            Assertion.equalTo(Chunk(Long.MinValue.toString)),
+          )
+        },
+        test("params decoding empty chunk") {
           assertZIO(codecSeqInt.decodeRequest(makeChunkRequest(seqIntParam, Chunk.empty)))(Assertion.isEmpty)
         },
-        test("paramSeq decoding with non-empty chunk") {
+        test("params decoding non-empty chunk") {
           assertZIO(codecSeqInt.decodeRequest(makeChunkRequest(seqIntParam, Chunk("2023", "10", "7"))))(
             Assertion.equalTo(Chunk(2023, 10, 7)),
           )
         },
-        test("paramSeq encoding with empty chunk") {
+        test("params encoding empty chunk") {
           assert(codecSeqInt.encodeRequest(Chunk.empty).url.queryParams.get(seqIntParam))(Assertion.isNone)
         },
-        test("paramSeq encoding with non-empty chunk") {
+        test("params encoding non-empty chunk") {
           assert(codecSeqInt.encodeRequest(Chunk(1974, 5, 3)).url.queryParams.getAll(seqIntParam).get)(
             Assertion.equalTo(Chunk("1974", "5", "3")),
+          )
+        },
+        test("paramOneOrMore decoding non-empty chunk") {
+          assertZIO(codecOneOrMoreStr.decodeRequest(makeChunkRequest(oneOrMoreStrParam, Chunk("one"))))(
+            Assertion.equalTo(NonEmptyChunk("one")),
+          ) &&
+          assertZIO(codecOneOrMoreStr.decodeRequest(makeChunkRequest(oneOrMoreStrParam, Chunk("one", "two", "three"))))(
+            Assertion.equalTo(NonEmptyChunk("one", "two", "three")),
+          )
+        },
+        test("paramOneOrMore encoding non-empty chunk") {
+          assert(
+            codecOneOrMoreStr
+              .encodeRequest(NonEmptyChunk("for", "five", "six"))
+              .url
+              .queryParams
+              .getAll(oneOrMoreStrParam)
+              .get,
+          )(
+            Assertion.equalTo(Chunk("for", "five", "six")),
           )
         },
       ) +
